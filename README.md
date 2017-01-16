@@ -1,12 +1,19 @@
-# plex-nginx-reverseproxy
+# Plex Nginx Reverse Proxy
  
-This is useful for running Plex over port 443(HTTPS), it's important to go to your Plex server settings and change the following settings.
+This configuration will allow you to run Plex over port 443(HTTPS) with Nginx.
  
-Remote Access - Manually specify public port = 443
+## Minimal Requirements
  
-Network - Custom server access URLs = https://plex.EXAMPLE.COM:443
+Nginx
+Plex:
+* Remote Access - Manually specify public port = 443
+* Network - Custom server access URLs = https://plex.EXAMPLE.COM:443
  
-It's also recommened to use a firewall such as ufw to deny port 32400 externally as Plex still pings it and sometimes uses it dispite having set 443.
+## Optional Requirements
  
-Doing this also allows you to run CloudFlare in front of your Plex server which can improve peering.
-When using CloudFlare you must have your SSL setting set to at least Full, flexable will not work and will result in an in-direct connection in Plex. You may also need to disable the firewall in CloudFlare if you experience issues.
+UFW or other firewall:
+* Deny port 32400 externally (Plex still pings over 32400, some clients may use 32400 dispite 443 being set by mistake).
+ 
+CloudFlare:
+* SSL set to at least Full.
+* Firewall disabled if an abnormal amount of load is expected.
