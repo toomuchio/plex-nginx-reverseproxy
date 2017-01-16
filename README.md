@@ -9,3 +9,4 @@ Network - Custom server access URLs = https://plex.EXAMPLE.COM:443
 It's also recommened to use a firewall such as ufw to deny port 32400 externally as Plex still pings it and sometimes uses it dispite having set 443.
  
 Doing this also allows you to run CloudFlare in front of your Plex server which can improve peering.
+When using CloudFlare you must have your SSL setting set to at least Full, flexable will not work and will result in an in-direct connection in Plex. You may also need to disable the firewall in CloudFlare if you experience issues.
