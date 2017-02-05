@@ -8,7 +8,7 @@ Nginx
  
 Plex:
 * Remote Access - Disable
-* Network - Custom server access URLs = https://<your-domain>:443
+* Network - Custom server access URLs = `https://<your-domain>:443`
  
 ## Optional Requirements
  
