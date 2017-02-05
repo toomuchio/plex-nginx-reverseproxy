@@ -7,13 +7,13 @@ This configuration will allow you to run Plex over port 443(HTTPS) with Nginx.
 Nginx
  
 Plex:
-* Remote Access - Manually specify public port = 443
-* Network - Custom server access URLs = https://plex.EXAMPLE.COM:443
+* Remote Access - Disable
+* Network - Custom server access URLs = https://<your-domain>:443
  
 ## Optional Requirements
  
 UFW or other firewall:
-* Deny port 32400 externally (Plex still pings over 32400, some clients may use 32400 dispite 443 being set by mistake).
+* Deny port 32400 externally (Plex still pings over 32400, some clients may use 32400 by mistake despite 443 being set).
  
 CloudFlare:
 * SSL set to at least Full.
