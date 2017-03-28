@@ -9,6 +9,7 @@ Nginx
 Plex:
 * Remote Access - Disable
 * Network - Custom server access URLs = `https://<your-domain>:443`
+* Network - Secure connections = Preferred (For player support (LG Smart TV ect..), can be required if needed).
  
 ## Optional Requirements
  
