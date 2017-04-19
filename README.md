@@ -1,6 +1,6 @@
 # Plex Nginx Reverse Proxy
  
-This configuration will allow you to run Plex over port 443(HTTPS) with Nginx.
+This configuration will allow you to serve Plex via Nginx.
  
 ## Minimal Requirements
  
