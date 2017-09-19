@@ -10,7 +10,7 @@ Plex:
 * Remote Access - Disable
 * Network - Custom server access URLs = `https://<your-domain>:443,http://<your-domain>:80`
 * Network - Secure connections = Preferred.
-* (Please note you can force ssl by setting required and not adding the http url, however some players which do not support https will no longer function).
+* ![#f03c15](https://placehold.it/15/f03c15/000000?text=+) `Note you can force SSL by setting required and not adding the HTTP URL, however some players which do not support HTTPS (e.g: Roku, Playstations, some SmartTVs) will no longer function.`
  
 ## Optional Requirements
  
