@@ -16,5 +16,5 @@ Plex:
  
 UFW or other firewall:
 * Deny port 32400 externally (Plex still pings over 32400, some clients may use 32400 by mistake despite 443 and 80 being set).
-* Adding `allowLocalhostOnly="1"` to your Preferences.xml, which will make Plex only listen on the localhost, acheving the same thing as above.
+* Note adding `allowLocalhostOnly="1"` to your Preferences.xml, will make Plex only listen on the localhost, achieving the same thing as using a firewall.
 
