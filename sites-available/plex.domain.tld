@@ -1,11 +1,14 @@
+# Must be set in the global scope see: https://forum.nginx.org/read.php?2,152294,152294
+# Why this is important especially with Plex as it makes a lot of requests http://vincent.bernat.im/en/blog/2011-ssl-session-reuse-rfc5077.html / https://www.peterbe.com/plog/ssl_session_cache-ab
 ssl_session_cache shared:SSL:10m;
-ssl_session_timeout 24h;
+ssl_session_timeout 10m;
 
 upstream plex_backend {
   server 127.0.0.1:32400;
   keepalive 32;
 }
 
+# Redirection to https
 server {
   listen 80;
   server_name plex.domain.tld;
@@ -14,38 +17,56 @@ server {
 }
 
 server {
+  # http2 can provide a substantial improvement for streaming: https://blog.cloudflare.com/introducing-http2
+  # Enabling http2 can cause some issues with some devices
   listen 443 ssl http2;
   server_name plex.domain.tld;
 
-  send_timeout 180m;
+  # Some players don't reopen a socket and playback stops instead of resuming after an extended pause
+  # Timeout set to Tautulli's limit before paused streams are terminatated
+  send_timeout 20m;
 
-  resolver 127.0.0.1 1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4 valid=300s;
+  # Use local DNS for faster resolving, improves stapling time
+  resolver 127.0.0.1 1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4 ipv6=off valid=300s;
   resolver_timeout 10s;
 
+  # https://support.cloudflare.com/hc/en-us/articles/217471977
   ssl_certificate /etc/nginx/ssl/domain.tld/cert.pem;
   ssl_certificate_key /etc/nginx/ssl/domain.tld/key.pem;
 
-  ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+  ssl_protocols TLSv1.2 TLSv1.3;
   ssl_prefer_server_ciphers on;
-  ssl_ciphers 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:CAMELLIA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA';
+  ssl_ciphers 'ssl_ciphers TLS13-AES-256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384;';
+  # https://github.com/kn007/patch/blob/master/nginx.patch
+  ssl_dyn_rec_enable on;
 
+  #  https://blog.cloudflare.com/ocsp-stapling-how-cloudflare-just-made-ssl-30/
   ssl_stapling on;
   ssl_stapling_verify on;
+  # https://support.cloudflare.com/hc/en-us/articles/217471977-How-to-install-an-Origin-CA-certificate-in-NGINX
   ssl_trusted_certificate /etc/nginx/ssl/domain.tld/cf-ca-root.pem;
   ssl_buffer_size 1400;
 
-  ssl_session_tickets off;
+  #openssl dhparam -out dhparam.pem 2048 - 4096 is more secure but for overhead reasons 2048 is enough for Plex.
   ssl_dhparam /etc/nginx/ssl/dhparam.pem;
   ssl_ecdh_curve X25519:prime256v1:secp521r1:secp384r1;
+  ssl_session_tickets off;
 
+  # https://blog.cloudflare.com/protecting-the-origin-with-tls-authenticated-origin-pulls
+  # https://support.cloudflare.com/hc/en-us/articles/204494148-Setting-up-NGINX-to-use-TLS-Authenticated-Origin-Pulls
   ssl_client_certificate /etc/nginx/ssl/domain.tld/cf.pem;
   ssl_verify_client on;
+  
+  #Nginx default client_max_body_size is 1MB, which breaks Camera Upload feature from the phones.
+  client_max_body_size 100M;
 
+  # A+ Certification on https://securityheaders.com
   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
   add_header X-Xss-Protection "1; mode=block" always;
   add_header X-Content-Type-Options "nosniff" always;
   add_header X-Frame-Options "SAMEORIGIN" always;
   add_header Referrer-Policy no-referrer always;
+  # Hashes valid for PMS version: 1.15.0.659
   add_header Content-Security-Policy "default-src 'none'; base-uri 'self'; script-src 'self' 'sha256-bNLweJN3Yzls1OKSBIB9E9CKdgE6T2upPOmMTe/a810=' 'sha256-JTbObKW6XPDkm3DQ1ISbW/U8NkUKjP8zajJ8ipx19Uw='; style-src 'self'; img-src 'self' https://provider-static.plex.tv data: blob:; font-src 'self' data:; connect-src 'self' https://plex.tv https://*.plex.direct:* wss://*.plex.direct:* wss://pubsub.plex.tv; media-src 'self' https://*.plex.direct:*; object-src 'self'; child-src 'none'; frame-src 'none'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; referrer no-referrer;" always;
   add_header Feature-Policy "geolocation none;midi none;notifications none;push none;sync-xhr none;microphone none;camera none;magnetometer none;gyroscope none;speaker self;vibrate none;fullscreen self;payment none;" always;
   add_header X-Robots-Tag "noindex, noarchive, nosnippet";
@@ -63,6 +84,9 @@ server {
   brotli_comp_level 6;
   brotli_types text/css text/javascript text/xml text/plain text/x-component application/javascript application/x-javascript application/json application/xml application/rss+xml application/vnd.ms-fontobject font/truetype font/opentype image/svg+xml;
 
+  # Disable IPv6 on Cloudflare: https://api.cloudflare.com/#zone-settings-change-ipv6-setting
+  # https://forums.plex.tv/t/plex-api-sessions-status-not-honoring-x-forwarded-for-x-real-ip-with-ipv6-clients/175705/26
+  # https://support.cloudflare.com/hc/en-us/articles/200170706-How-do-I-restore-original-visitor-IP-with-Nginx-
   set_real_ip_from 103.21.244.0/22;
   set_real_ip_from 103.22.200.0/22;
   set_real_ip_from 103.31.4.0/22;
@@ -77,20 +101,15 @@ server {
   set_real_ip_from 190.93.240.0/20;
   set_real_ip_from 197.234.240.0/22;
   set_real_ip_from 198.41.128.0/17;
-  set_real_ip_from 2400:cb00::/32;
-  set_real_ip_from 2606:4700::/32;
-  set_real_ip_from 2803:f800::/32;
-  set_real_ip_from 2405:b500::/32;
-  set_real_ip_from 2405:8100::/32;
-  set_real_ip_from 2c0f:f248::/32;
-  set_real_ip_from 2a06:98c0::/29;
 
   real_ip_header X-Forwarded-For;
+  
+  # Forward real ip and host to Plex
   proxy_pass_request_headers on;
 
   proxy_set_header Host $host;
   proxy_set_header X-Real-IP $remote_addr;
-  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-For $http_x_forwarded_for,$realip_remote_addr;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_set_header X-Forwarded-Ssl on;
 
@@ -107,19 +126,27 @@ server {
   proxy_set_header X-Plex-Device-Vendor $http_x_plex_device_vendor;
   proxy_set_header X-Plex-Model $http_x_plex_model;
 
+  # Websockets
+  proxy_set_header Sec-WebSocket-Extensions $http_sec_websocket_extensions;
+  proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;
+  proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;
+  
   proxy_http_version 1.1;
   proxy_set_header Upgrade $http_upgrade;
-  proxy_set_header Connection "Upgrade";
-
+  proxy_set_header Connection "Upgrade";  
+  
+  # Disables compression between Plex and Nginx
   proxy_set_header Accept-Encoding "";
 
+  # Buffering off - sends to the client as soon as the data is received from Plex
   proxy_redirect off;
   proxy_buffering off;
+  
+  # Custom error pages
   proxy_intercept_errors on;
 
   error_page 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 417 418 420 422 423 424 426 428 429 431 444 449 450 451 500 501 502 503 504 505 506 507 508 509 510 511 /error.html;
   location = /error.html {
-
     root /etc/nginx/html;
     internal;
   }
