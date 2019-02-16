@@ -149,7 +149,6 @@ patch -p1 < nginx_auto_using_PRIORITIZE_CHACHA.patch
   --with-http_ssl_module \
   --with-http_v2_module \
   --with-http_realip_module \
-  --with-http_sub_module \
   --add-module=$bpath/ngx_brotli \
   --add-module=$bpath/headers-more-nginx-module-$version_headers \
   --without-http_charset_module \
