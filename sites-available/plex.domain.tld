@@ -37,7 +37,7 @@ server {
   ssl_protocols TLSv1.2 TLSv1.3;
   ssl_prefer_server_ciphers on;
   ssl_ciphers 'TLS13-AES-256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384';
-  # https://github.com/nginx-modules/ngx_http_tls_dyn_size - can reduce latency
+  https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency/ - may reduce latency
   # https://github.com/kn007/patch/blob/master/nginx.patch
   ssl_dyn_rec_enable on;
 
@@ -46,7 +46,6 @@ server {
   ssl_stapling_verify on;
   # https://support.cloudflare.com/hc/en-us/articles/217471977-How-to-install-an-Origin-CA-certificate-in-NGINX
   ssl_trusted_certificate /etc/nginx/ssl/domain.tld/cf-ca-root.pem;
-  ssl_buffer_size 1400;
 
   #openssl dhparam -out dhparam.pem 2048 - 4096 is more secure but for overhead reasons 2048 is enough for Plex.
   ssl_dhparam /etc/nginx/ssl/dhparam.pem;
