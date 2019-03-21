@@ -13,10 +13,10 @@ server {
   listen 80;
   server_name plex.domain.tld;
   return 301 https://$host$request_uri;
-
 }
 
 server {
+
   # http2 can provide a substantial improvement for streaming: https://blog.cloudflare.com/introducing-http2
   # Enabling http2 can cause some issues with some devices
   listen 443 ssl http2;
@@ -47,7 +47,8 @@ server {
   # https://support.cloudflare.com/hc/en-us/articles/217471977-How-to-install-an-Origin-CA-certificate-in-NGINX
   ssl_trusted_certificate /etc/nginx/ssl/domain.tld/cf-ca-root.pem;
 
-  #openssl dhparam -out dhparam.pem 2048 - 4096 is more secure but for overhead reasons 2048 is enough for Plex.
+
+  # [openssl dhparam -out dhparam.pem 2048] 4096 is more secure but for overhead reasons 2048 is enough for Plex.
   ssl_dhparam /etc/nginx/ssl/dhparam.pem;
   ssl_ecdh_curve X25519:prime256v1:secp521r1:secp384r1;
   ssl_session_tickets off;
@@ -56,7 +57,7 @@ server {
   # https://support.cloudflare.com/hc/en-us/articles/204494148-Setting-up-NGINX-to-use-TLS-Authenticated-Origin-Pulls
   ssl_client_certificate /etc/nginx/ssl/domain.tld/cf.pem;
   ssl_verify_client on;
-  
+
   #Nginx default client_max_body_size is 1MB, which breaks Camera Upload feature from the phones.
   client_max_body_size 100M;
 
@@ -70,10 +71,11 @@ server {
   add_header Content-Security-Policy "default-src 'none'; base-uri 'self'; script-src 'self' 'sha256-bNLweJN3Yzls1OKSBIB9E9CKdgE6T2upPOmMTe/a810=' 'sha256-JTbObKW6XPDkm3DQ1ISbW/U8NkUKjP8zajJ8ipx19Uw='; style-src 'self'; img-src 'self' https://provider-static.plex.tv data: blob:; font-src 'self' data:; connect-src 'self' https://plex.tv https://*.plex.direct:* wss://*.plex.direct:* wss://pubsub.plex.tv; media-src 'self' https://*.plex.direct:*; object-src 'self'; child-src 'none'; frame-src 'none'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content; referrer no-referrer;" always;
   add_header Feature-Policy "geolocation none;midi none;notifications none;push none;sync-xhr none;microphone none;camera none;magnetometer none;gyroscope none;speaker self;vibrate none;fullscreen self;payment none;" always;
   add_header X-Robots-Tag "noindex, noarchive, nosnippet";
-  
+
   gzip on;
   gzip_vary on;
-  gzip_min_length 1000;
+  gzip_comp_level 5;
+  gzip_min_length 512;
   gzip_proxied any;
   gzip_types text/plain text/css text/xml application/xml text/javascript application/x-javascript image/svg+xml;
   gzip_disable "MSIE [1-6]\.";
@@ -87,26 +89,25 @@ server {
   # Disable IPv6 on Cloudflare: https://api.cloudflare.com/#zone-settings-change-ipv6-setting
   # https://forums.plex.tv/t/plex-api-sessions-status-not-honoring-x-forwarded-for-x-real-ip-with-ipv6-clients/175705/26
   # https://support.cloudflare.com/hc/en-us/articles/200170706-How-do-I-restore-original-visitor-IP-with-Nginx-
+  # https://www.cloudflare.com/ips-v4
+  set_real_ip_from 173.245.48.0/20;
   set_real_ip_from 103.21.244.0/22;
   set_real_ip_from 103.22.200.0/22;
   set_real_ip_from 103.31.4.0/22;
-  set_real_ip_from 104.16.0.0/12;
-  set_real_ip_from 108.162.192.0/18;
-  set_real_ip_from 131.0.72.0/22;
   set_real_ip_from 141.101.64.0/18;
-  set_real_ip_from 162.158.0.0/15;
-  set_real_ip_from 172.64.0.0/13;
-  set_real_ip_from 173.245.48.0/20;
-  set_real_ip_from 188.114.96.0/20;
+  set_real_ip_from 108.162.192.0/18;
   set_real_ip_from 190.93.240.0/20;
+  set_real_ip_from 188.114.96.0/20;
   set_real_ip_from 197.234.240.0/22;
   set_real_ip_from 198.41.128.0/17;
+  set_real_ip_from 162.158.0.0/15;
+  set_real_ip_from 104.16.0.0/12;
+  set_real_ip_from 172.64.0.0/13;
+  set_real_ip_from 131.0.72.0/22;
 
+  # Forward real ip and host to Plex  
   real_ip_header X-Forwarded-For;
-  
-  # Forward real ip and host to Plex
   proxy_pass_request_headers on;
-
   proxy_set_header Host $host;
   proxy_set_header X-Real-IP $remote_addr;
   proxy_set_header X-Forwarded-For $http_x_forwarded_for,$realip_remote_addr;
@@ -130,18 +131,18 @@ server {
   proxy_set_header Sec-WebSocket-Extensions $http_sec_websocket_extensions;
   proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;
   proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;
-  
+
   proxy_http_version 1.1;
   proxy_set_header Upgrade $http_upgrade;
-  proxy_set_header Connection "Upgrade";  
-  
+  proxy_set_header Connection "Upgrade";
+
   # Disables compression between Plex and Nginx
   proxy_set_header Accept-Encoding "";
 
   # Buffering off - sends to the client as soon as the data is received from Plex
   proxy_redirect off;
   proxy_buffering off;
-  
+
   # Custom error pages
   proxy_intercept_errors on;
 
@@ -152,6 +153,6 @@ server {
   }
 
   location / {
-    proxy_pass http://plex_backend;
+    proxy_pass https://plex_backend;
   }
 }
