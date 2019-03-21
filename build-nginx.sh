@@ -13,22 +13,22 @@ set -e -x
 version_pcre=pcre-8.42
 version_zlib=zlib-1.2.11
 version_openssl=openssl-1.1.1a
-version_libressl=libressl-2.8.3
-version_nginx=nginx-1.15.8
+#version_libressl=libressl-2.8.3
+version_nginx=nginx-1.15.9
 version_headers=0.33
 
 # Set checksums of latest versions
 sha256_pcre=69acbc2fbdefb955d42a4c606dfde800c2885711d2979e356c0636efde9ec3b5
 sha256_zlib=c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1
 sha256_openssl=fc20130f8b7cbd2fb918b2f14e2f429e109c31ddd0fb38fc5d71d9ffed3f9f41
-sha256_nginx=a8bdafbca87eb99813ae4fcac1ad0875bf725ce19eb265d28268c309b2b40787
+sha256_nginx=e4cfba989bba614cd53f3f406ac6da9f05977d6b1296e5d20a299f10c2d7ae43
 sha256_headers=a3dcbab117a9c103bc1ea5200fc00a7b7d2af97ff7fd525f16f8ac2632e30fbf
 
 # Set URLs to the source directories
 source_pcre=https://ftp.pcre.org/pub/pcre/
 source_zlib=https://zlib.net/
 source_openssl=https://www.openssl.org/source/
-source_libressl=https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/
+#source_libressl=https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/
 source_nginx=https://nginx.org/download/
 source_brotli=https://github.com/eustas/ngx_brotli
 source_headers=https://github.com/openresty/headers-more-nginx-module/archive/v
@@ -40,8 +40,7 @@ bpath=$(pwd)/build
 
 # Clean out any files from previous runs of this script
 rm -rf \
-  "$bpath" \
-  /etc/nginx-default
+  "$bpath"
 mkdir "$bpath"
 
 # Ensure the required software to compile NGINX is installed
@@ -64,9 +63,7 @@ curl -L "${source_nginx}${version_nginx}.tar.gz" -o "${bpath}/nginx.tar.gz" && \
 curl -L "${source_headers}${version_headers}.tar.gz" -o "${bpath}/headers.tar.gz" && \
   echo "${sha256_headers} ${bpath}/headers.tar.gz" | sha256sum -c -
 cd "$bpath"
-git clone $source_brotli
-cd "$bpath/ngx_brotli"
-git submodule update --init
+git clone --depth=1 --recurse-submodules $source_brotli
 
 # Expand the source files
 cd "$bpath"
