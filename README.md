@@ -5,7 +5,12 @@ This configuration will allow you to serve Plex via Nginx.
 ## Minimal Requirements
  
 Nginx
- 
+
+```bash
+# for Debian based systems:
+apt-get install -y nginx subversion ssl-cert socat
+```
+
 Plex:
 * Remote Access - Disable
 * Network - Custom server access URLs = `https://<your-domain>:443,http://<your-domain>:80`
