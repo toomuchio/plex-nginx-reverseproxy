@@ -1,0 +1,43 @@
+--- a/src/http/ngx_http_special_response.c	2017-09-05 18:10:54.121729433 +0900
++++ b/src/http/ngx_http_special_response.c	2017-09-05 18:13:14.571218420 +0900
+@@ -19,34 +19,34 @@
+ 
+ 
+ static u_char ngx_http_error_full_tail[] =
+-"<hr><center>" NGINX_VER "</center>" CRLF
++//"<hr><center>" NGINX_VER "</center>" CRLF
+ "</body>" CRLF
+ "</html>" CRLF
+ ;
+ 
+ 
+ static u_char ngx_http_error_build_tail[] =
+-"<hr><center>" NGINX_VER_BUILD "</center>" CRLF
++//"<hr><center>" NGINX_VER_BUILD "</center>" CRLF
+ "</body>" CRLF
+ "</html>" CRLF
+ ;
+ 
+ 
+ static u_char ngx_http_error_tail[] =
+-"<hr><center>nginx</center>" CRLF
++//"<hr><center>nginx</center>" CRLF
+ "</body>" CRLF
+ "</html>" CRLF
+ ;
+ 
+ 
+-static u_char ngx_http_msie_padding[] =
++static u_char ngx_http_msie_padding[] = CRLF;
++/* "<!-- a padding to disable MSIE and Chrome friendly error page -->" CRLF
+ "<!-- a padding to disable MSIE and Chrome friendly error page -->" CRLF
+ "<!-- a padding to disable MSIE and Chrome friendly error page -->" CRLF
+ "<!-- a padding to disable MSIE and Chrome friendly error page -->" CRLF
+ "<!-- a padding to disable MSIE and Chrome friendly error page -->" CRLF
+ "<!-- a padding to disable MSIE and Chrome friendly error page -->" CRLF
+-"<!-- a padding to disable MSIE and Chrome friendly error page -->" CRLF
+-;
++;*/
+ 
+ 
+ static u_char ngx_http_msie_refresh_head[] =

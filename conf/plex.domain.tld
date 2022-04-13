@@ -1,0 +1,209 @@
+## Must be set in the global scope see: https://forum.nginx.org/read.php?2,152294,152294
+## Why this is important especially with Plex as it makes a lot of requests http://vincent.bernat.im/en/blog/2011-ssl-session-reuse-rfc5077.html / https://www.peterbe.com/plog/ssl_session_cache-ab
+## https://ssl-config.mozilla.org/#server=nginx&version=1.17.7&config=intermediate&openssl=1.1.1k&guideline=5.6
+ssl_session_cache shared:MozSSL:10m;
+ssl_session_timeout 1d;
+ssl_session_tickets off;
+
+## cache for plex_backend/photo (purges files older than 24h or >950M)
+proxy_cache_path /var/cache/nginx/ramcache levels=1:2 keys_zone=my_zone:10m inactive=24h max_size=950M min_free=50M;
+
+## Upstream to PMS
+upstream plex_backend
+{
+  server 127.0.0.1:32400;
+  keepalive 32;
+}
+
+## Redirect http to https
+server
+{
+  listen 80;
+  server_name plex.domain.tld;
+  return 301 https://$host$request_uri;
+}
+
+server
+{
+  listen 443 ssl http2 reuseport; ## http2 can provide a substantial improvement for streaming: https://blog.cloudflare.com/introducing-http2/
+  listen 443 http3 reuseport; ## https://www.nginx.com/blog/introducing-technology-preview-nginx-support-for-quic-http-3/
+  server_name plex.domain.tld;
+
+  ## http://nginx.org/en/docs/http/ngx_http_v2_module.html
+  ## https://quic.nginx.org/readme.html
+  http3_stream_buffer_size 16M;
+  http3_max_concurrent_pushes 30;
+  http3_max_concurrent_streams 30;
+  large_client_header_buffers 4 16k;
+  keepalive_requests 50000;
+  http3_push on;
+  http3_push_preload on;
+  http2_push_preload on;
+  quic_retry on;
+  quic_gso on;
+
+  send_timeout 100m; ## Some players don't reopen a socket and playback stops totally instead of resuming after an extended pause (e.g. Chrome)
+  proxy_headers_hash_bucket_size 128;
+  proxy_headers_hash_max_size 1024;
+  proxy_buffers 32 4k;
+
+  ssl_early_data on; ## Enable TLSv1.3's 0-RTT. Use $ssl_early_data when reverse proxying to prevent replay attacks - http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_early_data
+  ssl_dyn_rec_enable on; ## https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency/
+  ssl_buffer_size 4k; ## https://haydenjames.io/nginx-tuning-tips-tls-ssl-https-ttfb-latency/
+
+  ## OCSP Stapling ---
+  ## fetch OCSP records from URL in ssl_certificate and cache them
+  resolver 127.0.0.1 1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4 ipv6=off valid=60s;
+  resolver_timeout 5s;
+  ssl_stapling on;
+  ssl_stapling_verify on;
+
+  ## https://support.cloudflare.com/hc/en-us/categories/200276247-SSL-TLS
+  ssl_certificate /etc/nginx/ssl/domain.tld/cert.pem;
+  ssl_certificate_key /etc/nginx/ssl/domain.tld/key.pem;
+  ssl_client_certificate /etc/nginx/ssl/domain.tld/cf.pem;
+  ssl_trusted_certificate /etc/nginx/ssl/domain.tld/cf-ca-root.pem;
+  ssl_dhparam /etc/nginx/ssl/dhparam.pem; # Generate: dhparam -out /etc/nginx/ssl/dhparam.pem 4096
+  ssl_verify_client on;
+
+  ## https://www.nginx.com/blog/improving-nginx-performance-with-kernel-tls/
+  ssl_protocols TLSv1.3;
+  ssl_conf_command Options KTLS;
+  ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384;
+  ssl_conf_command Ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384;
+  ssl_ecdh_curve secp384r1;
+  ssl_prefer_server_ciphers on;
+
+  ## Nginx default client_max_body_size is 1MB, which breaks Camera Upload feature from the phones.
+  ## Increasing the limit fixes the issue. Anyhow, if 4K videos are expected to be uploaded, the size might need to be increased even more
+  client_max_body_size 100M;
+
+  ## Compression
+  gzip on;
+  gzip_vary off;
+  gzip_disable msie6;
+  gzip_proxied expired no-cache no-store private auth;
+  gzip_comp_level 5;
+  gzip_min_length 512;
+  gzip_buffers 16 8k;
+  gzip_http_version 1.1;
+  gzip_types application/atom+xml application/javascript application/json application/rss+xml application/vnd.ms-fontobject application/x-font-opentype application/x-font-truetype application/x-font-ttf application/x-javascript application/xhtml+xml application/xml font/eot font/opentype font/otf font/truetype image/svg+xml image/vnd.microsoft.icon image/x-icon image/x-win-bitmap text/css text/javascript text/plain text/xml;
+
+  brotli on;
+  brotli_static off;
+  brotli_min_length 256;
+  brotli_buffers 16 8k;
+  brotli_comp_level 6;
+  brotli_types application/atom+xml application/javascript application/json application/rss+xml application/vnd.ms-fontobject application/x-font-opentype application/x-font-truetype application/x-font-ttf application/x-javascript application/xhtml+xml application/xml font/eot font/opentype font/otf font/truetype image/svg+xml image/vnd.microsoft.icon image/x-icon image/x-win-bitmap text/css text/javascript text/plain text/xml;
+
+  add_header Alt-Svc 'h3=":443"; ma=86400'; ## Advertise that QUIC is available
+  add_header X-Early-Data $tls1_3_early_data; ## 0-RTT
+
+  ## A+ certificate: https://securityheaders.com/
+  add_header X-Powered-By "domain.tld"; ## For privacy; change to suit
+  add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+  add_header X-Xss-Protection "1; mode=block" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header Referrer-Policy no-referrer always;
+  add_header Content-Security-Policy "default-src 'none';base-uri 'self';block-all-mixed-content ;connect-src 'self' https://*.plex.direct:* wss://*.plex.direct:* https://*.plex.tv wss://*.plex.tv;font-src 'self' data:;form-action 'self';frame-ancestors 'none';frame-src 'self';img-src 'self' blob: data: https://*.plex.tv;manifest-src 'self';media-src 'self';object-src 'none';script-src 'self' 'report-sample' https://www.gstatic.com/cv/js/sender/v1/cast_sender.js;style-src 'self' 'report-sample';upgrade-insecure-requests ;worker-src 'none';" always;
+  add_header Permissions-Policy "geolocation=();midi=();notifications=();push=();sync-xhr=();microphone=();camera=();magnetometer=();gyroscope=();speaker=(self);vibrate=();fullscreen=(self);payment=();" always;
+  add_header X-Robots-Tag "noindex, noarchive, nosnippet";
+  more_clear_headers "Pragma";
+  more_clear_headers "Expires";
+  more_clear_headers "Cache-Control";
+  more_set_headers 'Server: domain.tld'; ## For privacy; change to suit
+
+  ## Restoring original visitor IPs: https://support.cloudflare.com/hc/en-us/articles/200170786-Restoring-original-visitor-IPs-logging-visitor-IP-addresses
+  set_real_ip_from 103.21.244.0/22;
+  set_real_ip_from 103.22.200.0/22;
+  set_real_ip_from 103.31.4.0/22;
+  set_real_ip_from 104.16.0.0/12;
+  set_real_ip_from 104.24.0.0/14;
+  set_real_ip_from 108.162.192.0/18;
+  set_real_ip_from 131.0.72.0/22;
+  set_real_ip_from 141.101.64.0/18;
+  set_real_ip_from 162.158.0.0/15;
+  set_real_ip_from 172.64.0.0/13;
+  set_real_ip_from 173.245.48.0/20;
+  set_real_ip_from 188.114.96.0/20;
+  set_real_ip_from 190.93.240.0/20;
+  set_real_ip_from 197.234.240.0/22;
+  set_real_ip_from 198.41.128.0/17;
+  real_ip_header X-Forwarded-For;
+
+  proxy_pass_request_headers on;
+
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $http_x_forwarded_for,$realip_remote_addr;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-Ssl on;
+
+  ## Headers required for PMS
+  proxy_set_header X-Plex-Client-Identifier $http_x_plex_client_identifier;
+  proxy_set_header X-Plex-Device $http_x_plex_device;
+  proxy_set_header X-Plex-Device-Name $http_x_plex_device_name;
+  proxy_set_header X-Plex-Platform $http_x_plex_platform;
+  proxy_set_header X-Plex-Platform-Version $http_x_plex_platform_version;
+  proxy_set_header X-Plex-Product $http_x_plex_product;
+  proxy_set_header X-Plex-Token $http_x_plex_token;
+  proxy_set_header X-Plex-Version $http_x_plex_version;
+  proxy_set_header X-Plex-Nocache $http_x_plex_nocache;
+  proxy_set_header X-Plex-Provides $http_x_plex_provides;
+  proxy_set_header X-Plex-Device-Vendor $http_x_plex_device_vendor;
+  proxy_set_header X-Plex-Model $http_x_plex_model;
+
+  ## Enable websockets
+  proxy_set_header Sec-WebSocket-Extensions $http_sec_websocket_extensions;
+  proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;
+  proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;
+
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "Upgrade";
+  proxy_set_header Accept-Encoding "";
+  proxy_ssl_verify off;
+  proxy_read_timeout 86400;
+
+  ## Disables compression between PMS and Nginx
+  proxy_redirect off;
+  proxy_buffering off;
+  proxy_request_buffering off;
+
+  ## Redirect errors to domain
+  proxy_intercept_errors on;
+  error_page 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 417 418 420 422 423 424 426 428 429 431 444 449 450 451 500 501 502 503 504 505 506 507 508 509 510 511 =301 https://domain.tld;
+
+  ## Reverse proxy to PMS
+  location /
+  {
+    proxy_pass http://plex_backend;
+  }
+
+  ## /var/cache/nginx/ram_cache (caches after 1 use; valid for 24h)
+  location /photo
+  {
+    proxy_pass http://plex_backend/photo;
+    proxy_buffering on;
+    proxy_cache_min_uses 1;
+    proxy_cache my_zone;
+    proxy_cache_key "$host$request_uri$http_authorization";
+    proxy_cache_valid 200 24h;
+    add_header X-Cache-Status $upstream_cache_status;
+    sendfile on;
+  }
+
+  ## Redirects PMS webserver to domain
+  location /web/
+  {
+    return 301 https://domain.tld;
+  }
+}
+
+## 0-RTT
+map $ssl_early_data $tls1_3_early_data
+{
+  "~." $ssl_early_data;
+  default "";
+}
