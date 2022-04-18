@@ -9,20 +9,22 @@ fi
 set -e
 
 ## Set names of latest versions of each package
-VERSION_PCRE=pcre-8.45
-VERSION_NGINX=1.21.7
 VERSION_LIBATOMIC=7.6.12
-VERSION_HEADERS=0.33
+VERSION_MORE_HEADERS=0.33
+VERSION_NGINX=1.21.7
+VERSION_PCRE=pcre-8.45
+VERSION_SECURITY_HEADERS=0.0.11
 
 ## Set URLs to the source directories
-SOURCE_PCRE=https://ftp.exim.org/pub/pcre/
-SOURCE_ZLIB=https://github.com/cloudflare/zlib
-SOURCE_NGINX=https://hg.nginx.org/nginx-quic
-SOURCE_LIBATOMIC=https://github.com/ivmai/libatomic_ops/archive/v
 SOURCE_BROTLI=https://github.com/google/ngx_brotli
-SOURCE_HEADERS=https://github.com/openresty/headers-more-nginx-module/archive/v
 SOURCE_JEMALLOC=https://github.com/jemalloc/jemalloc
+SOURCE_LIBATOMIC=https://github.com/ivmai/libatomic_ops/archive/v
+SOURCE_MORE_HEADERS=https://github.com/openresty/headers-more-nginx-module/archive/v
+SOURCE_NGINX=https://hg.nginx.org/nginx-quic
 SOURCE_OPENSSL=https://github.com/quictls/openssl
+SOURCE_PCRE=https://ftp.exim.org/pub/pcre/
+SOURCE_SECURITY_HEADERS=https://github.com/GetPageSpeed/ngx_security_headers/archive/
+SOURCE_ZLIB=https://github.com/cloudflare/zlib
 
 ## Set where OpenSSL and NGINX will be built
 SPATH=$(pwd)
@@ -57,14 +59,19 @@ apt-get update && apt-get -y install \
   git \
   curl \
   wget
+  
+clear
 
 ## Download the source files
-curl -L "${SOURCE_PCRE}${VERSION_PCRE}.tar.gz" -o "${BPATH}/pcre.tar.gz"
 curl -L "${SOURCE_LIBATOMIC}${VERSION_LIBATOMIC}.tar.gz" -o "${BPATH}/libatomic.tar.gz"
-curl -L "${SOURCE_HEADERS}${VERSION_HEADERS}.tar.gz" -o "${BPATH}/headers.tar.gz"
+curl -L "${SOURCE_MORE_HEADERS}${VERSION_MORE_HEADERS}.tar.gz" -o "${BPATH}/more-headers.tar.gz"
+curl -L "${SOURCE_PCRE}${VERSION_PCRE}.tar.gz" -o "${BPATH}/pcre.tar.gz"
+curl -L "${SOURCE_SECURITY_HEADERS}${VERSION_SECURITY_HEADERS}.tar.gz" -o "${BPATH}/security-headers.tar.gz"
+
+
 cd "$BPATH"
-git clone $SOURCE_ZLIB --branch gcc.amd64
 git clone $SOURCE_JEMALLOC
+git clone $SOURCE_ZLIB --branch gcc.amd64
 git clone --depth=1 --recurse-submodules $SOURCE_BROTLI
 git clone --recursive $SOURCE_OPENSSL
 hg clone -b quic $SOURCE_NGINX
@@ -83,11 +90,11 @@ rm -rf \
 if [ ! -d "/var/cache/nginx/" ]; then
   mkdir -p \
     /var/cache/nginx/client_temp \
-    /var/cache/nginx/proxy_temp \
     /var/cache/nginx/fastcgi_temp \
-    /var/cache/nginx/uwsgi_temp \
+    /var/cache/nginx/proxy_temp \
+    /var/cache/nginx/ram_cache \
     /var/cache/nginx/scgi_temp \
-    /var/cache/nginx/ram_cache
+    /var/cache/nginx/uwsgi_temp
 fi
 
 ## We add sites-* folders as some use them. /etc/nginx/conf.d/ is the vhost folder by defaultnginx
@@ -132,13 +139,13 @@ make install
 ldconfig
 
 ## Build NGINX, with various modules included/excluded; requires GCC 11.2
+clear
 cd "$BPATH/ngx_brotli"
 readlink -f config
 
+## Add HTTP2 HPACK Encoding Support & Dynamic TLS Record Support - https://github.com/kn007/patch/blob/master/nginx.patch
 cd "$BPATH/nginx-quic"
 patch -p1  < "$SPATH/patches/nginx.patch"
-patch -p1  < "$SPATH/patches/nginx-1.14.x-1.17.x-ngx_http_header_filter_module.c.patch"
-patch -p1  < "$SPATH/patches/nginx-1.14.x-1.17.x-ngx_http_special_response.c.patch"
 
 ./auto/configure \
   --build="$TIME-[debian_nginx-quic_quictls]" \
@@ -147,53 +154,55 @@ patch -p1  < "$SPATH/patches/nginx-1.14.x-1.17.x-ngx_http_special_response.c.pat
   --with-ld-opt='-Wl,-E -L/usr/local/lib -ljemalloc -Wl,-z,relro -Wl,-rpath,/usr/local/lib -flto=8 -fuse-ld=gold' \
   --with-openssl="../openssl" \
   --with-openssl-opt='no-weak-ssl-ciphers no-ssl2 no-ssl3 no-idea no-err no-srp no-psk no-nextprotoneg enable-ktls enable-zlib enable-ec_nistp_64_gcc_128' \
-  --with-zlib="../zlib" \
   --with-pcre="../pcre-8.45" \
-  --sbin-path=/usr/sbin/nginx \
-  --modules-path=/usr/lib/nginx/modules \
+  --with-zlib="../zlib" \
   --conf-path=/etc/nginx/nginx.conf \
   --error-log-path=/var/log/nginx/error.log \
   --http-log-path=/var/log/nginx/access.log \
-  --pid-path=/var/run/nginx.pid \
   --lock-path=/var/run/nginx.lock \
+  --modules-path=/usr/lib/nginx/modules \
+  --pid-path=/var/run/nginx.pid \
+  --sbin-path=/usr/sbin/nginx \
   --http-client-body-temp-path=/var/cache/nginx/client_temp \
-  --http-proxy-temp-path=/var/cache/nginx/proxy_temp \
   --http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \
-  --http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp \
+  --http-proxy-temp-path=/var/cache/nginx/proxy_temp \
   --http-scgi-temp-path=/var/cache/nginx/scgi_temp \
+  --http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp \
   --user=nginx \
   --group=nginx \
   --with-file-aio \
-  --with-threads \
   --with-libatomic \
+  --with-threads \
+  --with-http_realip_module \
   --with-http_ssl_module \
+  --with-http_v2_hpack_enc \
   --with-http_v2_module \
   --with-http_v3_module \
-  --with-http_realip_module \
+  --add-module="../headers-more-nginx-module-$VERSION_MORE_HEADERS" \
   --add-module="../ngx_brotli" \
-  --add-module="../headers-more-nginx-module-0.33" \
-  --without-http_charset_module \
-  --without-http_ssi_module \
+  --add-module="../ngx_security_headers-$VERSION_SECURITY_HEADERS" \
   --without-http_auth_basic_module \
-  --without-http_mirror_module \
   --without-http_autoindex_module \
-  --without-http_userid_module \
-  --without-http_geo_module \
-  --without-http_split_clients_module \
-  --without-http_referer_module \
+  --without-http_browser_module \
+  --without-http_charset_module \
+  --without-http_empty_gif_module \
   --without-http_fastcgi_module \
-  --without-http_uwsgi_module \
-  --without-http_scgi_module \
+  --without-http_geo_module \
   --without-http_grpc_module \
-  --without-http_memcached_module \
   --without-http_limit_conn_module \
   --without-http_limit_req_module \
-  --without-http_empty_gif_module \
-  --without-http_browser_module \
+  --without-http_memcached_module \
+  --without-http_mirror_module \
+  --without-http_referer_module \
+  --without-http_scgi_module \
+  --without-http_split_clients_module \
+  --without-http_ssi_module \
   --without-http_upstream_hash_module \
   --without-http_upstream_ip_hash_module \
   --without-http_upstream_least_conn_module \
   --without-http_upstream_zone_module \
+  --without-http_userid_module \
+  --without-http_uwsgi_module \
   --without-mail_imap_module \
   --without-mail_pop3_module \
   --without-mail_smtp_module
