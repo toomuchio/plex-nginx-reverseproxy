@@ -34,24 +34,23 @@ server
   http3_stream_buffer_size 16M;
   http3_max_concurrent_pushes 30;
   http3_max_concurrent_streams 30;
-  large_client_header_buffers 4 16k;
-  keepalive_requests 50000;
   http3_push on;
   http3_push_preload on;
   http2_push_preload on;
   quic_retry on;
   quic_gso on;
 
-  send_timeout 100m; ## Some players don't reopen a socket and playback stops totally instead of resuming after an extended pause (e.g. Chrome)
+  keepalive_requests 50000;
+  large_client_header_buffers 4 16k;
+  proxy_buffers 32 4k;
   proxy_headers_hash_bucket_size 128;
   proxy_headers_hash_max_size 1024;
-  proxy_buffers 32 4k;
+  send_timeout 100m; ## Some players don't reopen a socket and playback stops totally instead of resuming after an extended pause (e.g. Chrome)
 
   ssl_early_data on; ## Enable TLSv1.3's 0-RTT. Use $ssl_early_data when reverse proxying to prevent replay attacks - http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_early_data
   ssl_dyn_rec_enable on; ## https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency/
   ssl_buffer_size 4k; ## https://haydenjames.io/nginx-tuning-tips-tls-ssl-https-ttfb-latency/
 
-  ## OCSP Stapling ---
   ## fetch OCSP records from URL in ssl_certificate and cache them
   resolver 127.0.0.1 1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4 ipv6=off valid=60s;
   resolver_timeout 2s;
@@ -80,7 +79,7 @@ server
     return '405';
   }
 
-  ## Nginx default client_max_body_size is 1MB, which breaks Camera Upload feature from the phones.
+  ## Nginx default client_max_body_size is 1MB, which breaks Camera Upload feature from the phones
   ## Increasing the limit fixes the issue. Anyhow, if 4K videos are expected to be uploaded, the size might need to be increased even more
   client_max_body_size 100M;
 
